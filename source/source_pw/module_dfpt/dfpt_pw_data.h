@@ -25,8 +25,15 @@ namespace ModuleDFPT
 /// deeper than the current self-consistency warrants: for flat semicore
 /// band systems the shifted operator is near-singular and a full-depth
 /// solve against an unconverged screening potential amplifies the response
-/// beyond what the outer mixing can damp (residual pinned at 1.0). The
-/// floor guards the converged tail of the outer loop.
+/// beyond what the outer mixing can damp (residual pinned at 1.0).
+/// A relative-tracking guard min(..., 10*R) is added on top of the QE
+/// formula: the bare sqrt schedule deadlocks near convergence, because
+/// the inner truncation noise (~thr per solve) pins the outer residual at
+/// an amplitude that maps straight back to the same loose threshold
+/// (observed: outer plateau 2-4e-7 with lin pinned at ~5e-5, 100 iters
+/// burned); with the guard the truncation noise shrinks proportionally
+/// with the outer residual instead. The floor guards the converged tail
+/// of the outer loop.
 inline double adaptive_lin_thr(double prev_outer_residual,
                                double cap = 1.0e-2,
                                double floor_thr = 1.0e-10)
@@ -38,6 +45,11 @@ inline double adaptive_lin_thr(double prev_outer_residual,
         if (tracked < thr)
         {
             thr = tracked;
+        }
+        const double relative = 10.0 * prev_outer_residual;
+        if (relative < thr)
+        {
+            thr = relative;
         }
     }
     return thr < floor_thr ? floor_thr : thr;

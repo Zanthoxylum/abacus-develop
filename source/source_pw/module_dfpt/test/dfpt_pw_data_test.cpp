@@ -172,10 +172,15 @@ TEST_F(DFPT_PW_DataTest, AdaptiveLinThrSchedule)
     // the cap is an upper bound: a loose R (0.1*sqrt(R)=0.1) still clamps
     // to 1e-2, exactly QE's min(0.1*sqrt(dr2), 1e-2)
     EXPECT_DOUBLE_EQ(ModuleDFPT::adaptive_lin_thr(1.0), 1.0e-2);
-    // R = 1e-4: 0.1*sqrt = 1e-3 < cap
+    // R = 1e-4: 0.1*sqrt = 1e-3 < cap, relative guard 1e-3 ties
     EXPECT_NEAR(ModuleDFPT::adaptive_lin_thr(1.0e-4), 1.0e-3, 1.0e-15);
-    // R = 1e-8: 0.1*sqrt = 1e-5
-    EXPECT_NEAR(ModuleDFPT::adaptive_lin_thr(1.0e-8), 1.0e-5, 1.0e-17);
+    // R = 1e-6: sqrt branch 1e-4, relative guard 1e-5 dominates
+    EXPECT_NEAR(ModuleDFPT::adaptive_lin_thr(1.0e-6), 1.0e-5, 1.0e-17);
+    // the observed deadlock plateau (R ~ 3e-7): the guard forces lin to
+    // 3e-6 instead of the sqrt branch's 5e-5, breaking the fixed point
+    EXPECT_NEAR(ModuleDFPT::adaptive_lin_thr(3.0e-7), 3.0e-6, 1.0e-18);
+    // R = 1e-8: 0.1*sqrt = 1e-5, guard 1e-7 dominates
+    EXPECT_NEAR(ModuleDFPT::adaptive_lin_thr(1.0e-8), 1.0e-7, 1.0e-19);
     // converged tail: the floor guards against vanishing thresholds
     EXPECT_DOUBLE_EQ(ModuleDFPT::adaptive_lin_thr(1.0e-30), 1.0e-10);
     // monotone in R on the tracking branch
