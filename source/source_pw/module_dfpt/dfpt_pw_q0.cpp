@@ -354,6 +354,18 @@ void DFPT_PW::Impl::solve_efield_resp(int q_idx)
             {
                 lin_thr = adaptive_lin_thr(residual);
             }
+            // per-iteration trace in the displacement-solve style: the
+            // E-field response is otherwise invisible until it converges,
+            // and with the adaptive inner threshold it can legitimately
+            // run for tens of iterations
+            {
+                std::ostringstream trace;
+                trace << "  DFPT efield mix dir=" << a << " iter=" << std::setw(3) << std::right << iter + 1 << "/"
+                      << max_iter_ << " residual=" << std::setprecision(3) << std::scientific << residual
+                      << " (thr " << std::setprecision(1) << std::scientific << conv_thr_ << ", lin "
+                      << std::setprecision(1) << std::scientific << lin_thr << ")" << std::endl;
+                std::cout << trace.str();
+            }
             if (converged)
             {
                 std::cout << "DFPT efield dir=" << a << " converged, residual=" << residual << " (iter=" << iter << ")"
