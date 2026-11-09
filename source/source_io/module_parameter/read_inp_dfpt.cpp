@@ -181,13 +181,19 @@ void ReadInput::item_dfpt()
         item.type = "Real";
         item.description = "Dedicated convergence threshold of the projected CG solve of the "
                            "Sternheimer equation inside every DFPT response iteration. "
-                           "Non-positive values (the default) inherit dfpt_conv_thr, which "
-                           "reproduces the historical single-knob behavior. Decouple them when "
-                           "a hard response needs a loose inner solve to keep the outer mixing "
-                           "stable (e.g. flat semicore bands make the shifted operator "
-                           "near-singular and a very deep inner solve amplifies the response "
-                           "beyond what the outer mixing can damp).";
-        item.default_value = "-1.0 (inherit dfpt_conv_thr)";
+                           "A positive value pins the threshold for all outer iterations. "
+                           "Non-positive values (the default) run the QE-style adaptive "
+                           "schedule (PHonon/PH/solve_linter.f90 semantics): the inner "
+                           "threshold of outer iteration k is min(0.1*sqrt(R_k-1), 1e-2), "
+                           "starting from the 1e-2 cap, so a hard response is never solved "
+                           "deeper than the current self-consistency warrants. The adaptive "
+                           "default stabilizes flat semicore band systems whose shifted "
+                           "operator is near-singular: a full-depth inner solve against an "
+                           "unconverged screening potential amplifies the response beyond "
+                           "what the outer mixing can damp (residual pinned at 1.0). The "
+                           "bare q = 0 position-operator solves keep inheriting "
+                           "dfpt_conv_thr either way.";
+        item.default_value = "-1.0 (adaptive)";
         read_sync_double(input.dfpt_lin_conv_thr);
         this->add_item(item);
     }

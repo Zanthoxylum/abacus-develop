@@ -7,6 +7,7 @@
 #include "source_cell/qlist.h"
 #include "source_psi/psi.h"
 
+#include <cmath>
 #include <complex>
 #include <map>
 #include <utility>
@@ -16,6 +17,31 @@ class Plus_U_Base;
 
 namespace ModuleDFPT
 {
+
+/// QE-style adaptive threshold of the Sternheimer linear solve (PHonon/PH/
+/// solve_linter.f90 semantics: thresh = min(0.1*sqrt(R_outer), 1e-2), where
+/// R_outer is the previous response-SCF residual and the cap is used before
+/// any residual exists). The inner solve of outer iteration k is never
+/// deeper than the current self-consistency warrants: for flat semicore
+/// band systems the shifted operator is near-singular and a full-depth
+/// solve against an unconverged screening potential amplifies the response
+/// beyond what the outer mixing can damp (residual pinned at 1.0). The
+/// floor guards the converged tail of the outer loop.
+inline double adaptive_lin_thr(double prev_outer_residual,
+                               double cap = 1.0e-2,
+                               double floor_thr = 1.0e-10)
+{
+    double thr = cap;
+    if (prev_outer_residual > 0.0)
+    {
+        const double tracked = 0.1 * std::sqrt(prev_outer_residual);
+        if (tracked < thr)
+        {
+            thr = tracked;
+        }
+    }
+    return thr < floor_thr ? floor_thr : thr;
+}
 
 /// Occupied-band classifier shared by the projector build, the Sternheimer
 /// driver, the response-density accumulation and the 2n+1 assembly. A band
@@ -228,6 +254,14 @@ class DFPT_PW_Data
     double get_lin_conv_thr() const
     {
         return lin_conv_thr_ > 0.0 ? lin_conv_thr_ : conv_thr_;
+    }
+    /// whether the user pinned the inner threshold explicitly; when false
+    /// the displacement and E-field response solves switch to the QE-style
+    /// adaptive schedule (adaptive_lin_thr) while the bare q=0 position
+    /// legs keep inheriting the outer value
+    bool lin_conv_thr_explicit() const
+    {
+        return lin_conv_thr_ > 0.0;
     }
 
     /// Per-(q, irrep) SCF convergence ledger (B4: sunk from the retired

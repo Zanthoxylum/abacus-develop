@@ -162,6 +162,28 @@ TEST_F(DFPT_PW_DataTest, PerIrrepScfLedger)
     clear_qlist();
 }
 
+TEST_F(DFPT_PW_DataTest, AdaptiveLinThrSchedule)
+{
+    // the QE-style schedule: cap before any residual exists, then track
+    // 0.1*sqrt(R) of the previous outer iteration, floored far below any
+    // usable threshold
+    EXPECT_DOUBLE_EQ(ModuleDFPT::adaptive_lin_thr(0.0), 1.0e-2);
+    EXPECT_DOUBLE_EQ(ModuleDFPT::adaptive_lin_thr(-1.0), 1.0e-2);
+    // the cap is an upper bound: a loose R (0.1*sqrt(R)=0.1) still clamps
+    // to 1e-2, exactly QE's min(0.1*sqrt(dr2), 1e-2)
+    EXPECT_DOUBLE_EQ(ModuleDFPT::adaptive_lin_thr(1.0), 1.0e-2);
+    // R = 1e-4: 0.1*sqrt = 1e-3 < cap
+    EXPECT_NEAR(ModuleDFPT::adaptive_lin_thr(1.0e-4), 1.0e-3, 1.0e-15);
+    // R = 1e-8: 0.1*sqrt = 1e-5
+    EXPECT_NEAR(ModuleDFPT::adaptive_lin_thr(1.0e-8), 1.0e-5, 1.0e-17);
+    // converged tail: the floor guards against vanishing thresholds
+    EXPECT_DOUBLE_EQ(ModuleDFPT::adaptive_lin_thr(1.0e-30), 1.0e-10);
+    // monotone in R on the tracking branch
+    EXPECT_GT(ModuleDFPT::adaptive_lin_thr(1.0e-2), ModuleDFPT::adaptive_lin_thr(1.0e-6));
+    // a custom cap replaces the default 1e-2 before any residual exists
+    EXPECT_DOUBLE_EQ(ModuleDFPT::adaptive_lin_thr(0.0, 5.0e-2), 5.0e-2);
+}
+
 TEST_F(DFPT_PW_DataTest, LinSolverKnobsInheritByDefault)
 {
     init_qlist();

@@ -269,7 +269,14 @@ double DFPT_PW::Impl::solve_displacement(int q_idx, int iat, int idir)
     data_.set_drho_g(q_idx, 0, std::vector<std::complex<double>>(npw, std::complex<double>(0.0, 0.0)));
 
     const int lin_max = data_.get_lin_max_iter();
-    const double lin_thr = data_.get_lin_conv_thr();
+    // inner-solver threshold: a user-pinned dfpt_lin_conv_thr is fixed for
+    // every outer iteration; the inherit sentinel runs the QE-style
+    // adaptive schedule, re-deriving the threshold from the previous outer
+    // residual so the near-singular response of flat-band systems is only
+    // solved deep once the screening potential is nearly converged
+    const bool lin_adaptive = !data_.lin_conv_thr_explicit();
+    const double lin_thr_pinned = data_.get_lin_conv_thr();
+    double lin_thr = lin_adaptive ? adaptive_lin_thr(0.0) : lin_thr_pinned;
 
     bool converged = false;
     double residual = 0.0;
@@ -460,6 +467,13 @@ double DFPT_PW::Impl::solve_displacement(int q_idx, int iat, int idir)
         }
         converged = (residual < conv_thr_);
         ++n_iter_done;
+        // adaptive schedule: the next outer iteration's Sternheimer depth
+        // tracks this residual (10x looser than sqrt of it, capped at the
+        // first-iteration 1e-2), the solve_linter.f90 stabilization
+        if (lin_adaptive)
+        {
+            lin_thr = adaptive_lin_thr(residual);
+        }
     }
     // convergence summary in the efield-solve style; names the state
     // explicitly instead of failing silently at max_iter; formatted in a

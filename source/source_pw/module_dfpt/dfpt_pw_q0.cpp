@@ -303,7 +303,11 @@ void DFPT_PW::Impl::solve_efield_resp(int q_idx)
     const int nk = gs_psi_.get_nk();
     const int nbands = gs_psi_.get_nbands();
     const int lin_max = data_.get_lin_max_iter();
-    const double lin_thr = data_.get_lin_conv_thr();
+    // same adaptive/pinned policy as solve_displacement: the inherit
+    // sentinel runs the QE-style schedule tracking the outer residual
+    const bool lin_adaptive = !data_.lin_conv_thr_explicit();
+    const double lin_thr_pinned = data_.get_lin_conv_thr();
+    double lin_thr = lin_adaptive ? adaptive_lin_thr(0.0) : lin_thr_pinned;
 
     for (int a = 0; a < 3; ++a)
     {
@@ -346,6 +350,10 @@ void DFPT_PW::Impl::solve_efield_resp(int q_idx)
             residual_last = residual;
             converged = (residual < conv_thr_);
             ++n_iter_done;
+            if (lin_adaptive)
+            {
+                lin_thr = adaptive_lin_thr(residual);
+            }
             if (converged)
             {
                 std::cout << "DFPT efield dir=" << a << " converged, residual=" << residual << " (iter=" << iter << ")"
