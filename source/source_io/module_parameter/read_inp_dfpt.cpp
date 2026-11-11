@@ -180,20 +180,31 @@ void ReadInput::item_dfpt()
         item.category = category;
         item.type = "Real";
         item.description = "Dedicated convergence threshold of the projected CG solve of the "
-                           "Sternheimer equation inside every DFPT response iteration. "
-                           "A positive value pins the threshold for all outer iterations. "
-                           "Non-positive values (the default) run the QE-style adaptive "
-                           "schedule (PHonon/PH/solve_linter.f90 semantics): the inner "
-                           "threshold of outer iteration k is min(0.1*sqrt(R_k-1), 1e-2), "
-                           "starting from the 1e-2 cap, so a hard response is never solved "
-                           "deeper than the current self-consistency warrants. The adaptive "
-                           "default stabilizes flat semicore band systems whose shifted "
-                           "operator is near-singular: a full-depth inner solve against an "
-                           "unconverged screening potential amplifies the response beyond "
-                           "what the outer mixing can damp (residual pinned at 1.0). The "
-                           "bare q = 0 position-operator solves keep inheriting "
-                           "dfpt_conv_thr either way.";
-        item.default_value = "-1.0 (adaptive)";
+                           "Sternheimer equation inside every DFPT response iteration, as the "
+                           "relative residual ||P_c r|| / ||P_c b|| of the projected system "
+                           "(r: CG residual, b: projected right-hand side, P_c: complement of "
+                           "the occupied subspace at k+q). A positive value pins the "
+                           "threshold for all outer iterations. Non-positive values (the "
+                           "default) start from the historical inherit behavior (threshold = "
+                           "dfpt_conv_thr) and escalate per displacement to the QE-style "
+                           "adaptive schedule (PHonon/PH/solve_linter.f90 semantics) only "
+                           "when the outer mixing stagnates: threshold of outer iteration k "
+                           "= min(0.1*sqrt(R_k-1), 10*R_k-1, 1e-2), with the iteration cap "
+                           "tightened to at most 40. Ordinary systems never trigger the "
+                           "escalation and keep the single-knob behavior; flat semicore band "
+                           "systems whose shifted operator is near-singular are rescued "
+                           "automatically (a full-depth inner solve against an unconverged "
+                           "screening potential amplifies the response beyond what the "
+                           "outer mixing can damp, residual pinned at 1.0). The bare q = 0 "
+                           "position-operator solves keep inheriting dfpt_conv_thr either "
+                           "way. Accuracy tradeoff of a truncated inner solve: the outer "
+                           "mixing residual does NOT check the achieved Sternheimer "
+                           "residual, and the same controls also affect the one-shot Gamma "
+                           "position response; when the knobs are loosened for a hard "
+                           "response, validate the phonons, dielectric tensor and Born "
+                           "charges against tighter inner settings to quantify the "
+                           "truncation error.";
+        item.default_value = "-1.0 (inherit, escalate on stagnation)";
         read_sync_double(input.dfpt_lin_conv_thr);
         this->add_item(item);
     }
@@ -208,7 +219,12 @@ void ReadInput::item_dfpt()
                            "reproduces the historical single-knob behavior. Lower it to "
                            "truncate the CG before it drives into near-singular directions of "
                            "a flat-band system; raise it for otherwise unconverged inner "
-                           "solves without enlarging the outer mixing budget.";
+                           "solves without enlarging the outer mixing budget. The cap has the "
+                           "same accuracy tradeoff as dfpt_lin_conv_thr: the outer mixing "
+                           "residual does not check the achieved Sternheimer residual, the "
+                           "one-shot Gamma position response shares the cap, and truncated "
+                           "inner solves should be validated against tighter settings on the "
+                           "phonons, dielectric tensor and Born charges.";
         item.default_value = "0 (inherit dfpt_max_iter)";
         read_sync_int(input.dfpt_lin_max_iter);
         this->add_item(item);
