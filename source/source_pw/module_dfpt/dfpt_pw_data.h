@@ -55,6 +55,31 @@ inline double adaptive_lin_thr(double prev_outer_residual,
     return thr < floor_thr ? floor_thr : thr;
 }
 
+/// Outer-mixing stagnation detector for the inner-threshold escalation
+/// (the adaptive default starts from the historical inherit behavior and
+/// only switches a displacement to the adaptive schedule when its outer
+/// residual stops improving). Escalate when the residual improved by less
+/// than `factor` over the last `window` iterations: converging systems
+/// never trigger it, while the near-singular stall (residual pinned at
+/// ~1.0) and the loose-inner plateau (residual oscillating at a fixed
+/// amplitude) both do.
+inline bool lin_stagnated(const std::vector<double>& outer_residuals,
+                          int window = 5,
+                          double factor = 2.0)
+{
+    if (static_cast<int>(outer_residuals.size()) < window + 1)
+    {
+        return false;
+    }
+    const double recent = outer_residuals.back();
+    const double past = outer_residuals[outer_residuals.size() - 1 - window];
+    if (!(past > 0.0) || !(recent > 0.0))
+    {
+        return false;
+    }
+    return recent > past / factor;
+}
+
 /// Occupied-band classifier shared by the projector build, the Sternheimer
 /// driver, the response-density accumulation and the 2n+1 assembly. A band
 /// counts as occupied iff its weight exceeds half of the per-k full

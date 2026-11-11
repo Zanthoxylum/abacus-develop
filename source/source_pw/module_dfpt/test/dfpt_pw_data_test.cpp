@@ -162,6 +162,39 @@ TEST_F(DFPT_PW_DataTest, PerIrrepScfLedger)
     clear_qlist();
 }
 
+TEST_F(DFPT_PW_DataTest, LinStagnationDetector)
+{
+    // converging history (10x per iteration) never escalates
+    std::vector<double> converging;
+    for (int i = 0; i < 10; ++i)
+    {
+        converging.push_back(std::pow(10.0, -1.0 - i));
+    }
+    EXPECT_FALSE(ModuleDFPT::lin_stagnated(converging));
+
+    // the pinned-at-1.0 stall escalates as soon as the window fills
+    // (window+1 = 6 entries)
+    EXPECT_FALSE(ModuleDFPT::lin_stagnated({1.0, 1.0, 1.0, 1.0, 1.0}));
+    std::vector<double> pinned(6, 1.0);
+    EXPECT_TRUE(ModuleDFPT::lin_stagnated(pinned));
+
+    // the loose-inner plateau escalates once the window is filled with the
+    // oscillating tail (the descending phase inside the window alone does
+    // not trip it)
+    std::vector<double> plateau = {1.0, 3.1e-1, 3.8e-7, 2.5e-7, 3.8e-7, 2.6e-7, 3.7e-7};
+    EXPECT_FALSE(ModuleDFPT::lin_stagnated(plateau));
+    plateau.push_back(2.7e-7);
+    EXPECT_TRUE(ModuleDFPT::lin_stagnated(plateau));
+
+    // borderline: exactly 2x over the window stays quiet, 1.6x escalates
+    EXPECT_FALSE(ModuleDFPT::lin_stagnated({1.0, 0.8, 0.7, 0.65, 0.6, 0.5, 0.4}));
+    EXPECT_TRUE(ModuleDFPT::lin_stagnated({1.0, 0.8, 0.7, 0.65, 0.6, 0.55, 0.5}));
+
+    // short histories and non-positive residuals never escalate
+    EXPECT_FALSE(ModuleDFPT::lin_stagnated({1.0, 1.0, 1.0}));
+    EXPECT_FALSE(ModuleDFPT::lin_stagnated({1.0, 0.0, 0.0, 0.0, 0.0, 0.0}));
+}
+
 TEST_F(DFPT_PW_DataTest, AdaptiveLinThrSchedule)
 {
     // the QE-style schedule: cap before any residual exists, then track

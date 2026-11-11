@@ -302,12 +302,15 @@ void DFPT_PW::Impl::solve_efield_resp(int q_idx)
     const int npw = pw_rho_->npw;
     const int nk = gs_psi_.get_nk();
     const int nbands = gs_psi_.get_nbands();
-    const int lin_max = data_.get_lin_max_iter();
-    // same adaptive/pinned policy as solve_displacement: the inherit
-    // sentinel runs the QE-style schedule tracking the outer residual
-    const bool lin_adaptive = !data_.lin_conv_thr_explicit();
-    const double lin_thr_pinned = data_.get_lin_conv_thr();
-    double lin_thr = lin_adaptive ? adaptive_lin_thr(0.0) : lin_thr_pinned;
+    const int lin_max_inherited = data_.get_lin_max_iter();
+    // same v4 policy as solve_displacement: inherit first, escalate per
+    // direction to the adaptive schedule (with the tightened cap) only on
+    // outer-mixing stagnation; a pinned threshold stays fixed
+    const bool lin_pinned = data_.lin_conv_thr_explicit();
+    const double lin_thr_inherited = data_.get_lin_conv_thr();
+    double lin_thr = lin_thr_inherited;
+    int lin_max = lin_max_inherited;
+    std::vector<double> outer_residual_history;
 
     for (int a = 0; a < 3; ++a)
     {
@@ -321,6 +324,10 @@ void DFPT_PW::Impl::solve_efield_resp(int q_idx)
         bool converged = false;
         int n_iter_done = 0;
         double residual_last = 0.0;
+        lin_thr = lin_thr_inherited;
+        lin_max = lin_max_inherited;
+        bool lin_escalated = false;
+        outer_residual_history.clear();
         for (int iter = 0; iter < max_iter_ && !converged; ++iter)
         {
             // screened response potential of the mixed input density
@@ -350,7 +357,19 @@ void DFPT_PW::Impl::solve_efield_resp(int q_idx)
             residual_last = residual;
             converged = (residual < conv_thr_);
             ++n_iter_done;
-            if (lin_adaptive)
+            // v4 escalation, mirroring solve_displacement (stagnation over
+            // 5 iterations switches this direction to the adaptive schedule
+            // with the tightened cap)
+            outer_residual_history.push_back(residual);
+            if (!lin_pinned && !lin_escalated && lin_stagnated(outer_residual_history))
+            {
+                lin_escalated = true;
+                lin_max = lin_max_inherited < 40 ? lin_max_inherited : 40;
+                lin_thr = adaptive_lin_thr(residual);
+                std::cout << "  DFPT lin escalation (efield dir " << a << ") at iter " << n_iter_done
+                          << ": outer mixing stagnated, switching to the adaptive inner threshold" << std::endl;
+            }
+            else if (lin_escalated)
             {
                 lin_thr = adaptive_lin_thr(residual);
             }
