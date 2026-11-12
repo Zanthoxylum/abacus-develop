@@ -8,6 +8,7 @@
 // units via dfpt_pw_impl.h.
 // ============================================================
 
+#include <algorithm>
 #include "dfpt_pw_impl.h"
 
 #include "dfpt_pw_data.h"
@@ -269,13 +270,19 @@ double DFPT_PW::Impl::solve_displacement(int q_idx, int iat, int idir)
     data_.set_drho_g(q_idx, 0, std::vector<std::complex<double>>(npw, std::complex<double>(0.0, 0.0)));
 
     const int lin_max_inherited = data_.get_lin_max_iter();
-    // inner-solver policy (v4): a user-pinned dfpt_lin_conv_thr is fixed for
+    // inner-solver policy (v5): a user-pinned dfpt_lin_conv_thr is fixed for
     // every outer iteration; the inherit sentinel starts from the historical
-    // behavior (threshold = dfpt_conv_thr, cap = dfpt_lin_max_iter) and
-    // escalates per displacement to the adaptive schedule with a tightened
-    // cap only when the outer mixing stagnates. Ordinary systems keep the
-    // fast single-knob behavior; near-singular flat-band systems (residual
-    // pinned at ~1.0 by the amplified response) are rescued automatically
+    // behavior (threshold = dfpt_conv_thr, cap = dfpt_lin_max_iter). On
+    // outer-mixing stagnation the displacement is RESTARTED from scratch
+    // with the escalated configuration (adaptive schedule min(0.1*sqrt(R),
+    // 10*R, 1e-2), cap <= 40): v4 only switched the threshold mid-flight,
+    // but the first inherit iterations of a near-singular flat-band system
+    // poison the Broyden history with the amplified response and the late
+    // switch cannot recover (z=12 X displacements stalled at 0.3-1.3 after
+    // escalating at iteration 6, while the same configuration from
+    // iteration 0 converges in 16-23 iterations). The restart replays the
+    // proven from-the-start configuration; ordinary systems never trigger
+    // it and keep the fast single-knob behavior
     const bool lin_pinned = data_.lin_conv_thr_explicit();
     const double lin_thr_inherited = data_.get_lin_conv_thr();
     bool lin_escalated = false;
@@ -312,7 +319,36 @@ double DFPT_PW::Impl::solve_displacement(int q_idx, int iat, int idir)
         vsc_broyden_mdata_.reset(new Base_Mixing::Mixing_Data());
         vsc_broyden_->init_mixing_data(*vsc_broyden_mdata_, nrxx, sizeof(std::complex<double>));
     }
-    for (int iter = 0; iter < max_iter_ && !converged; ++iter)
+    // v5 restart wrapper: attempt 0 = historical inherit settings; on
+    // stagnation (and only when the knob is not pinned) attempt 1 restarts
+    // the whole displacement from a zero input with the escalated adaptive
+    // settings and fresh mixing state. The cumulative iteration budget
+    // stays bounded by max_iter_
+    for (int attempt = 0; attempt < 2 && !converged; ++attempt)
+    {
+    if (attempt == 1)
+    {
+        // escalation restart: fresh potential, fresh Broyden, escalated knobs
+        lin_escalated = true;
+        lin_max = lin_max_inherited < 40 ? lin_max_inherited : 40;
+        lin_thr = adaptive_lin_thr(0.0);
+        outer_residual_history.clear();
+        std::fill(v_sc_in_r.begin(), v_sc_in_r.end(), std::complex<double>(0.0, 0.0));
+        data_.set_drho_g(q_idx, 0, std::vector<std::complex<double>>(npw, std::complex<double>(0.0, 0.0)));
+        rho_.reset_mixing(q_idx);
+        if (vsc_broyden)
+        {
+            vsc_broyden_->reset();
+            vsc_broyden_mdata_.reset(new Base_Mixing::Mixing_Data());
+            vsc_broyden_->init_mixing_data(*vsc_broyden_mdata_, nrxx, sizeof(std::complex<double>));
+        }
+        std::ostringstream note;
+        note << "  DFPT lin escalation restart (attempt 2): outer mixing stagnated, restarting the displacement "
+             << "with the adaptive inner threshold (" << std::scientific << std::setprecision(1) << lin_thr
+             << ", lin_max " << lin_max << ")" << std::defaultfloat << std::endl;
+        std::cout << note.str();
+    }
+    for (int iter = 0; iter < max_iter_ && !converged && n_iter_done < max_iter_; ++iter)
     {
         std::vector<std::complex<double>> v_sc_r;
         if (vsc_mode)
@@ -472,30 +508,24 @@ double DFPT_PW::Impl::solve_displacement(int q_idx, int iat, int idir)
         }
         converged = (residual < conv_thr_);
         ++n_iter_done;
-        // escalation check (v4): while not pinned and not yet escalated,
+        // stagnation probe (v5): while not pinned and not yet escalated,
         // watch the outer residual history; stagnation (less than 2x
         // improvement over 5 iterations, which covers both the pinned-at-1.0
-        // stall and the loose-inner plateau) switches this displacement to
-        // the adaptive schedule with a tightened iteration cap. Once
-        // escalated, the threshold tracks the previous outer residual
-        // (min(0.1*sqrt(R), 10*R, 1e-2), the solve_linter.f90 stabilization
-        // with the relative-tracking guard)
+        // stall and the loose-inner plateau) aborts the inherit attempt —
+        // the restart wrapper re-enters with the escalated adaptive
+        // schedule (min(0.1*sqrt(R), 10*R, 1e-2) tracking, cap <= 40) and
+        // fresh mixing state. Once escalated, the threshold keeps tracking
+        // the previous outer residual
         outer_residual_history.push_back(residual);
         if (!lin_pinned && !lin_escalated && lin_stagnated(outer_residual_history))
         {
-            lin_escalated = true;
-            lin_max = lin_max_inherited < 40 ? lin_max_inherited : 40;
-            lin_thr = adaptive_lin_thr(residual);
-            std::ostringstream note;
-            note << "  DFPT lin escalation at iter " << n_iter_done << ": outer mixing stagnated, switching to the "
-                 << "adaptive inner threshold (" << std::scientific << std::setprecision(1) << lin_thr
-                 << ", lin_max " << lin_max << ")" << std::defaultfloat << std::endl;
-            std::cout << note.str();
+            break;
         }
-        else if (lin_escalated)
+        if (lin_escalated)
         {
             lin_thr = adaptive_lin_thr(residual);
         }
+    }
     }
     // convergence summary in the efield-solve style; names the state
     // explicitly instead of failing silently at max_iter; formatted in a
