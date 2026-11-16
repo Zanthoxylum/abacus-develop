@@ -330,9 +330,9 @@ double DFPT_PW::Impl::solve_displacement(int q_idx, int iat, int idir)
                 }
                 continue;
             }
-            pert_.apply_dv(q_idx, ik, gs_psi_, data_);
+            pert_.apply_dv(q_idx, ik, gs_psi_, data_, ikq_of_k_[ik], dn_of_k_[ik]);
             std::vector<std::vector<std::complex<double>>> dv_sc;
-            pert_.apply_vr(q_idx, ik, v_sc_r, gs_psi_, q_cart, dv_sc);
+            pert_.apply_vr(q_idx, ik, v_sc_r, gs_psi_, q_cart, dv_sc, ikq_of_k_[ik], dn_of_k_[ik]);
             if (ik != last_ik_ || last_q_ != q_idx)
             {
                 hamilt_->set_context(q_cart, ik);

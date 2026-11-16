@@ -106,6 +106,22 @@ class DFPT_Pert
                   const ModuleBase::Vector3<double>& q_cart,
                   std::vector<std::vector<std::complex<double>>>& dv_psi) const;
 
+    /// commensurate overload: uses the ground-state k' ball translated
+    /// by dn (init_from_gs_ball) instead of the two-reservoir init(),
+    /// ensuring the same G set as the occupied-state copy
+    void apply_vr(int q_idx,
+                  int k_idx,
+                  const std::vector<std::complex<double>>& v_rc,
+                  const psi::Psi<std::complex<double>>& psi,
+                  const ModuleBase::Vector3<double>& q_cart,
+                  std::vector<std::vector<std::complex<double>>>& dv_psi,
+                  int ikq,
+                  const ModuleBase::Vector3<int>& dn) const;
+
+    /// commensurate overload for apply_dv (same rationale as above)
+    void apply_dv(int q_idx, int k_idx, const psi::Psi<std::complex<double>>& psi, DFPT_PW_Data& data,
+                  int ikq, const ModuleBase::Vector3<int>& dn);
+
     /// Grid helper: reconstruct the cartesian reciprocal vector (in 2*pi/lat0
     /// units) of rho-grid index ig from the shared FFT-grid (ix,iy,iz) mapping.
     /// A stateless building block exposed publicly so the serial analytic

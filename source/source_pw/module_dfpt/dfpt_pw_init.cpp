@@ -294,6 +294,7 @@ void DFPT_PW::Impl::build_occ_kq(int q_idx)
     const int nk = pw_wfc_->nks;
     occ_kq_.assign(nk, std::vector<std::vector<std::complex<double>>>());
     ikq_of_k_.assign(nk, -1);
+    dn_of_k_.assign(nk, ModuleBase::Vector3<int>(0, 0, 0));
     const ModuleBase::Vector3<double> q_frac = data_.get_qvec(q_idx);
     const ModuleBase::Vector3<double> q_cart = q_frac * ucell_->G;
     const double kmatch_tol = 1.0e-6; ///< empirical parameter: folded fractional k-list match tolerance
@@ -302,9 +303,13 @@ void DFPT_PW::Impl::build_occ_kq(int q_idx)
         ModuleBase::Vector3<int> dn(0, 0, 0);
         const int ikq = match_commensurate_kq(ik, q_frac, kmatch_tol, dn);
         ikq_of_k_[ik] = ikq;
+        dn_of_k_[ik] = dn;
 
         DFPT_KQ_Basis kq;
-        kq.init(pw_wfc_, pw_rho_, q_cart, ik);
+        // build the k+q ball directly from the ground-state k' ball
+        // (exact same plane-wave set, translated by dn) — guarantees
+        // N(k+q) == N(k') with no boundary truncation
+        kq.init_from_gs_ball(pw_wfc_, pw_rho_, q_cart, ik, ikq, dn);
         const ModuleBase::Matrix3 ginv = pw_wfc_->G.Inverse();
         copy_occ_state_ball(ik, ikq, dn, kq, ginv, occ_kq_[ik]);
     }

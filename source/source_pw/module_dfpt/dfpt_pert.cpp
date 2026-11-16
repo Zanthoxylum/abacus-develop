@@ -265,6 +265,30 @@ void DFPT_Pert::apply_vr(int q_idx,
     ModuleBase::timer::end("DFPT_Pert", "apply_vr");
 }
 
+void DFPT_Pert::apply_vr(int q_idx,
+                          int k_idx,
+                          const std::vector<std::complex<double>>& v_rc,
+                          const psi::Psi<std::complex<double>>& psi,
+                          const ModuleBase::Vector3<double>& q_cart,
+                          std::vector<std::vector<std::complex<double>>>& dv_psi,
+                          int ikq,
+                          const ModuleBase::Vector3<int>& dn) const
+{
+    ModuleBase::TITLE("DFPT_Pert", "apply_vr");
+    ModuleBase::timer::start("DFPT_Pert", "apply_vr");
+    (void)q_idx;
+    if (pw_rho_ == nullptr || pw_wfc_ == nullptr || v_rc.size() != static_cast<size_t>(pw_rho_->nrxx))
+    {
+        dv_psi.clear();
+        ModuleBase::timer::end("DFPT_Pert", "apply_vr");
+        return;
+    }
+    DFPT_KQ_Basis kq;
+    kq.init_from_gs_ball(pw_wfc_, pw_rho_, q_cart, k_idx, ikq, dn);
+    apply_vr_core(k_idx, v_rc, psi, kq, dv_psi);
+    ModuleBase::timer::end("DFPT_Pert", "apply_vr");
+}
+
 void DFPT_Pert::apply_vr_core(int k_idx,
                               const std::vector<std::complex<double>>& v_rc,
                               const psi::Psi<std::complex<double>>& psi,
@@ -319,6 +343,47 @@ void DFPT_Pert::apply_dv(int q_idx, int k_idx, const psi::Psi<std::complex<doubl
     real_space_dv(q_idx, k_idx, psi, data, kq, dv_psi);
 
     // nonlocal contribution: dVnl/dtau |psi> (per displaced atom)
+    std::vector<std::vector<std::complex<double>>> dv_psi_nl;
+    dVnl_dtau(atom_idx, dir, q_cart, psi, k_idx, dv_psi_nl);
+    if (dv_psi_nl.size() == static_cast<size_t>(nbands))
+    {
+        for (int iband = 0; iband < nbands; ++iband)
+        {
+            if (dv_psi[iband].size() != dv_psi_nl[iband].size())
+            {
+                continue;
+            }
+            for (size_t i = 0; i < dv_psi[iband].size(); ++i)
+            {
+                dv_psi[iband][i] += dv_psi_nl[iband][i];
+            }
+        }
+    }
+
+    for (int iband = 0; iband < nbands; ++iband)
+    {
+        data.set_dpsi(q_idx, k_idx, iband, dv_psi[iband]);
+    }
+    ModuleBase::timer::end("DFPT_Pert", "apply_dv");
+}
+
+void DFPT_Pert::apply_dv(int q_idx, int k_idx, const psi::Psi<std::complex<double>>& psi, DFPT_PW_Data& data,
+                          int ikq, const ModuleBase::Vector3<int>& dn)
+{
+    ModuleBase::TITLE("DFPT_Pert", "apply_dv");
+    ModuleBase::timer::start("DFPT_Pert", "apply_dv");
+    const int atom_idx = data.get_pert_atom();
+    const int dir = data.get_pert_dir();
+    const ModuleBase::Vector3<double> q_cart = data.get_qvec(q_idx) * ucell_->G;
+
+    DFPT_KQ_Basis kq;
+    kq.init_from_gs_ball(pw_wfc_, pw_rho_, q_cart, k_idx, ikq, dn);
+
+    const int nbands = psi.get_nbands();
+    std::vector<std::vector<std::complex<double>>> dv_psi(nbands);
+
+    real_space_dv(q_idx, k_idx, psi, data, kq, dv_psi);
+
     std::vector<std::vector<std::complex<double>>> dv_psi_nl;
     dVnl_dtau(atom_idx, dir, q_cart, psi, k_idx, dv_psi_nl);
     if (dv_psi_nl.size() == static_cast<size_t>(nbands))

@@ -55,6 +55,32 @@ class DFPT_KQ_Basis
               const ModuleBase::Vector3<double>& q_cart,
               int ik);
 
+    /**
+     * @brief Build the k+q ball by translating the ground-state k' ball.
+     *
+     * For commensurate q (k+q matches a ground-state k' on the mesh, with
+     * k' = k + q - G_recip for an integer reciprocal-basis triple dn), the
+     * k+q plane-wave set is exactly the k' ball's set shifted by dn — same
+     * Cartesian momenta, same count. Building from the ground-state ball
+     * directly guarantees N(k+q) == N(k') with no boundary truncation,
+     * unlike the two-reservoir enumeration in init() which can produce a
+     * different count at the sphere boundary and silently zero coefficients
+     * in the occupied-state copy (boundary truncation mismatch).
+     *
+     * @param pw_wfc ground-state k-dependent plane-wave basis
+     * @param pw_rho ground-state charge-density plane-wave basis
+     * @param q_cart perturbation wavevector in Cartesian coordinates
+     * @param ik index of the ground-state k point
+     * @param ikq index of the matched k' = k+q point on the ground-state mesh
+     * @param dn integer reciprocal-basis offset: k'_d = k_d + q_d + dn
+     */
+    void init_from_gs_ball(const ModulePW::PW_Basis_K* pw_wfc,
+                           const ModulePW::PW_Basis* pw_rho,
+                           const ModuleBase::Vector3<double>& q_cart,
+                           int ik,
+                           int ikq,
+                           const ModuleBase::Vector3<int>& dn);
+
     void clear();
 
     bool is_valid() const

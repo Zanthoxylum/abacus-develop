@@ -178,6 +178,9 @@ class DFPT_PW::Impl
     int last_q_ = -1;
     int last_ik_ = -1;
     std::vector<int> ikq_of_k_;
+    ///< per-k integer reciprocal-basis fold offsets (dn) from build_occ_kq; used by
+    ///< the commensurate pert overloads to build the k+q G ball from the k' ball
+    std::vector<ModuleBase::Vector3<int>> dn_of_k_;
 
     int nqx_ = 1, nqy_ = 1, nqz_ = 1;
     std::string qfile_;

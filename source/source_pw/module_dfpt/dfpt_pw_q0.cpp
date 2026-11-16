@@ -331,7 +331,7 @@ void DFPT_PW::Impl::solve_efield_resp(int q_idx)
                     continue;
                 }
                 std::vector<std::vector<std::complex<double>>> dv_sc;
-                pert_.apply_vr(q_idx, ik, v_sc_r, gs_psi_, q_cart, dv_sc);
+                pert_.apply_vr(q_idx, ik, v_sc_r, gs_psi_, q_cart, dv_sc, ikq_of_k_[ik], dn_of_k_[ik]);
                 if (last_q_ != q_idx || last_ik_ != ik)
                 {
                     hamilt_->set_context(q_cart, ik);
