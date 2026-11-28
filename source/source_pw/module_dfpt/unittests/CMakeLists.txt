@@ -251,5 +251,5 @@ endif()
 # test links only the module itself plus base.
 addtest(
   TARGET MODULE_DFPT_symm_serial
-  LIBS device base
+  LIBS parameter dfpt_planewave_serial device base symmetry
   SOURCES test_dfpt_symm.cpp ../dfpt_symm.cpp)
